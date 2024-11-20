@@ -1,3 +1,190 @@
+import os
+import sys
+from distutils.util import strtobool
+
+import boto3
+from dotenv import load_dotenv
+from flask import Flask, abort, request
+from langchain.chains import ConversationalRetrievalChain
+from langchain.chat_models import ChatOpenAI
+from langchain.memory import ConversationBufferMemory
+from langchain_community.vectorstores.pgvector import PGVector
+from linebot import LineBotApi, WebhookHandler, WebhookParser
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
+from opencc import OpenCC
+
+import src.constants as const
+import src.utils as utils
+from src.utils import MaxPoolingEmbeddings, PathHelper, get_logger
+
+import threading
+from linebot.models import (
+    FlexSendMessage,
+    BubbleContainer,
+    BoxComponent,
+    TextComponent,
+    LoadingComponent
+)
+
+# logger, env and const
+logger = get_logger(__name__)
+dotenv_path = PathHelper.root_dir / ".env"
+load_dotenv(dotenv_path=dotenv_path)
+encoding_model_name = const.ENCODING_MODEL_NAME
+
+# get channel_secret and channel_access_token from your environment variable
+channel_secret = os.getenv("CHANNEL_SECRET", None)
+channel_access_token = os.getenv("CHANNEL_ACCESS_TOKEN", None)
+if channel_secret is None:
+    print("Specify LINE_CHANNEL_SECRET as environment variable.")
+    sys.exit(1)
+if channel_access_token is None:
+    print("Specify LINE_CHANNEL_ACCESS_TOKEN as environment variable.")
+    sys.exit(1)
+
+# multi-lingual support
+support_multilingual = strtobool(os.getenv("SUPPORT_MULTILINGUAL", "False"))
+
+#
+def sync_vector_db_from_s3():
+    """download from s3 if folder db/{xxx} is not exist"""
+    s3r = boto3.resource(
+        "s3",
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+        region_name=os.getenv("AWS_REGION_NAME"),
+    )
+    s3_bucket = s3r.Bucket(const.S3_BUCKET_NAME)
+    
+    if not os.path.exists(PathHelper.db_dir / const.CHROMA_DB):
+        logger.info("downloading db from s3")
+        for obj in s3_bucket.objects.filter(Prefix=f"{const.DB}/{const.CHROMA_DB}"):
+            if not os.path.exists(os.path.dirname(obj.key)):
+                os.makedirs(os.path.dirname(obj.key))
+            logger.info(f"download file: {obj.key}")
+            s3_bucket.download_file(obj.key, obj.key)
+
+# configure_retriever
+def configure_retriever():
+    logger.info("configuring retriever")
+    embeddings = MaxPoolingEmbeddings(
+        api_key=os.getenv("HUGGINGFACEHUB_API_TOKEN"),
+        model_name=encoding_model_name,
+    )
+
+    # vectordb = Chroma(
+    #     persist_directory=str(PathHelper.db_dir / const.CHROMA_DB),
+    #     embedding_function=embeddings,
+    # )
+    vectordb = PGVector(
+        collection_name=const.COLLECTION_NAME,
+        connection_string=utils.get_connection_string(),
+        embedding_function=embeddings,
+    )
+    retriever = vectordb.as_retriever(
+        search_type="mmr", search_kwargs={"k": const.N_DOCS}
+    )
+
+    logger.info("configuring retriever done")
+    return retriever
+
+
+# create app
+app = Flask(__name__)
+line_bot_api = LineBotApi(channel_access_token)
+handler = WebhookHandler(channel_secret)
+parser = WebhookParser(channel_secret)
+
+# initialize agent and retriever
+llm = ChatOpenAI(
+    model_name=const.CHAT_GPT_MODEL_NAME,
+    temperature=0,
+    streaming=True,
+)
+
+# configure retriever
+retriever = configure_retriever()
+
+# create converter (simple chinese to traditional chinese)
+s2t_converter = OpenCC("s2t")
+
+# translate and comprehend
+translate = boto3.client(
+    "translate",
+    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+    region_name=os.getenv("AWS_REGION_NAME"),
+)
+comprehend = boto3.client(
+    "comprehend",
+    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+    region_name=os.getenv("AWS_REGION_NAME"),
+)
+
+
+# create memory
+memory = ConversationBufferMemory(
+    memory_key="chat_history",
+    return_messages=True,
+    input_key="question",
+    output_key="answer",
+)
+
+# use PromptTemplate to generate prompts
+qa_chain = ConversationalRetrievalChain.from_llm(
+    llm,
+    retriever=retriever,
+    memory=memory,
+    verbose=True,
+    return_source_documents=True,
+)
+
+
+def create_typing_bubble():
+    """創建打字中的 Flex Message"""
+    return FlexSendMessage(
+        alt_text="思考中...",
+        contents=BubbleContainer(
+            size="micro",
+            body=BoxComponent(
+                layout="horizontal",
+                contents=[
+                    TextComponent(
+                        text="思考中",
+                        size="sm",
+                        color="#8c8c8c",
+                        flex=0
+                    ),
+                    BoxComponent(
+                        layout="horizontal",
+                        contents=[
+                            TextComponent(
+                                text=".",
+                                size="sm",
+                                color="#8c8c8c"
+                            ),
+                            TextComponent(
+                                text=".",
+                                size="sm",
+                                color="#8c8c8c"
+                            ),
+                            TextComponent(
+                                text=".",
+                                size="sm",
+                                color="#8c8c8c"
+                            )
+                        ],
+                        flex=0,
+                        spacing="none"
+                    )
+                ],
+                spacing="sm",
+                alignItems="center"
+            )
+        )
+    )
+
 def process_message_async(event):
     try:
         # 發送打字狀態
@@ -78,6 +265,7 @@ def process_message_async(event):
         except Exception as reply_error:
             logger.error(f"Error sending error message: {str(reply_error)}")
 
+# create handlers
 @app.route("/callback", methods=["POST"])
 def callback():
     signature = request.headers["X-Line-Signature"]
@@ -91,8 +279,16 @@ def callback():
         logger.error(f"Callback error: {str(e)}")
         abort(400)
 
+
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     thread = threading.Thread(target=process_message_async, args=(event,))
     thread.daemon = True  # 設置為守護線程
     thread.start()
+
+if __name__ == "__main__":
+    # sync_vector_db_from_s3()  # run once
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
+
+    logger.info("app started")
