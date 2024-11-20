@@ -78,7 +78,7 @@ def main(args):
 
     if args.db == "pgvector":
         db = PGVector(
-            collection_name=const.COLLECTION_NAME,
+            collection_name=args.collection,
             connection_string=get_connection_string(),
             embedding_function=embeddings,
         )
@@ -108,6 +108,11 @@ if __name__ == "__main__":
         "--db",
         type=str,
         default="pgvector",
+    )
+    parser.add_argument(
+        "--collection",
+        type=str,
+        default=const.COLLECTION_NAME
     )
 
     args = parser.parse_args()

@@ -33,7 +33,7 @@ PROMPT = (
 DEFAULT_LANG = "zh-TW"
 
 # s3
-S3_BUCKET_NAME = "ask-me-parenting"
+S3_BUCKET_NAME = "ask-me"
 
 # collection
 COLLECTION_NAME = "video_chunks"

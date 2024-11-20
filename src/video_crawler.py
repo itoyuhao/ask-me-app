@@ -32,6 +32,7 @@ def main(args):
 
     # scroll
     ht = driver.execute_script("return document.documentElement.scrollHeight;")
+    start_time = time.time()
     while True:
         prev_ht = driver.execute_script("return document.documentElement.scrollHeight;")
         driver.execute_script(
@@ -40,6 +41,11 @@ def main(args):
         time.sleep(2)
         ht = driver.execute_script("return document.documentElement.scrollHeight;")
         if prev_ht == ht:
+            break
+
+        # 檢查是否超過 2 分鐘
+        if time.time() - start_time > 300:  # 120 秒
+            logger.warning("Reached maximum scroll time of 2 minutes.")
             break
 
     # save
