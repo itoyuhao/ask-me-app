@@ -36,6 +36,24 @@ if channel_access_token is None:
 # multi-lingual support
 support_multilingual = strtobool(os.getenv("SUPPORT_MULTILINGUAL", "False"))
 
+#
+def sync_vector_db_from_s3():
+    """download from s3 if folder db/{xxx} is not exist"""
+    s3r = boto3.resource(
+        "s3",
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+        region_name=os.getenv("AWS_REGION_NAME"),
+    )
+    s3_bucket = s3r.Bucket(const.S3_BUCKET_NAME)
+    
+    if not os.path.exists(PathHelper.db_dir / const.CHROMA_DB):
+        logger.info("downloading db from s3")
+        for obj in s3_bucket.objects.filter(Prefix=f"{const.DB}/{const.CHROMA_DB}"):
+            if not os.path.exists(os.path.dirname(obj.key)):
+                os.makedirs(os.path.dirname(obj.key))
+            logger.info(f"download file: {obj.key}")
+            s3_bucket.download_file(obj.key, obj.key)
 
 # configure_retriever
 def configure_retriever():
@@ -44,23 +62,6 @@ def configure_retriever():
         api_key=os.getenv("HUGGINGFACEHUB_API_TOKEN"),
         model_name=encoding_model_name,
     )
-
-    # # download from s3 if folder db/{xxx} is not exist
-    # s3r = boto3.resource(
-    #     "s3",
-    #     aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-    #     aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-    #     region_name=os.getenv("AWS_REGION_NAME"),
-    # )
-    # s3_bucket = s3r.Bucket(const.S3_BUCKET_NAME)
-
-    # if not os.path.exists(PathHelper.db_dir / const.CHROMA_DB):
-    #     logger.info("downloading db from s3")
-    #     for obj in s3_bucket.objects.filter(Prefix=f"{const.DB}/{const.CHROMA_DB}"):
-    #         if not os.path.exists(os.path.dirname(obj.key)):
-    #             os.makedirs(os.path.dirname(obj.key))
-    #         logger.info(f"download file: {obj.key}")
-    #         s3_bucket.download_file(obj.key, obj.key)
 
     # vectordb = Chroma(
     #     persist_directory=str(PathHelper.db_dir / const.CHROMA_DB),
@@ -207,6 +208,7 @@ def handle_message(event):
 
 
 if __name__ == "__main__":
+    # sync_vector_db_from_s3()  # run once
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
 
