@@ -50,6 +50,7 @@ class PathHelper:
     entities_dir = data_dir / "entities"
     audio_dir = data_dir / "audio"
     text_dir = data_dir / "text"
+    doc_dir = data_dir / "doc"
     db_dir = root_dir / "db"
 
     # create
