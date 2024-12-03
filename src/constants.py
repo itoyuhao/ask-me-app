@@ -36,4 +36,4 @@ DEFAULT_LANG = "zh-TW"
 S3_BUCKET_NAME = "ask-me"
 
 # collection
-COLLECTION_NAME = "goTrim"
+COLLECTION_NAME = "video_chunks"
