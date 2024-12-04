@@ -152,9 +152,11 @@ def callback():
 def handle_message(event):
     question = event.message.text.strip()
 
-    if question.startswith("/清除") or question.lower().startswith("/clear"):
+    if question.startswith("/清除") or question.startswith("/消除記憶") or question.lower().startswith("/clear"):
         memory.clear()
-        answer = "歷史訊息清除成功"
+        answer = "剛剛我們在說什麼? 我什麼都不記得了🫨"
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=answer))
+        return
     elif (
         question.startswith("/教學")
         or question.startswith("/指令")
@@ -163,7 +165,9 @@ def handle_message(event):
         or question.lower().startswith("/instruction")
         or question.lower().startswith("/help")
     ):
-        answer = "指令：\n/清除 or /clear\n👉 當 Bot 開始鬼打牆，可清除歷史訊息來重置"
+        answer = "1. 請直接發問，我會翻翻我腦中的知識，盡我所知地回答你。\n\n2. 因為我是個謹慎的AI，如果我不知道答案我會說我不知道，再請你換個方式問或換個問題，不要罵我🥹\n\n3. 當我開始鬼打牆，可以使用指令：「/清除」,「/消除記憶」或「/clear」來重置我的記憶🪄"
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=answer))
+        return
     else:
         if support_multilingual:
             # check input language
