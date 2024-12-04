@@ -213,7 +213,7 @@ def handle_message(event):
         ref_doc_template = f"{ref_doc_template}\n{url}"
 
     # add reference video/doc
-    answer = f"{answer}\n\nReference: {ref_doc_template}" if answer != '我不知道。' else f"以下是我找到最接近的參考資訊\n\nReference: {ref_doc_template}"
+    answer = f"{answer}\n\nReference: {ref_doc_template}" if answer != '我不知道。' else f"這個部分我不太確定，以下是我找到最接近的參考資訊\n\nReference: {ref_doc_template}"
 
     # reply message
     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=answer))
