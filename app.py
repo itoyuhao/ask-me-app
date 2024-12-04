@@ -154,7 +154,7 @@ def handle_message(event):
 
     if question.startswith("/清除") or question.startswith("/消除記憶") or question.lower().startswith("/clear"):
         memory.clear()
-        answer = "剛剛我們在說什麼? 我什麼都不記得了🫨"
+        answer = "剛剛我們在說什麼?\n我什麼都不記得了🫨"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=answer))
         return
     elif (
@@ -165,7 +165,7 @@ def handle_message(event):
         or question.lower().startswith("/instruction")
         or question.lower().startswith("/help")
     ):
-        answer = "1. 請直接發問，我會翻翻我腦中的知識，盡我所知地回答你。\n\n2. 因為我是個謹慎的AI，如果我不知道答案我會說我不知道，再請你換個方式問或換個問題，不要罵我🥹\n\n3. 當我開始鬼打牆，可以使用指令：「/清除」,「/消除記憶」或「/clear」來重置我的記憶🪄"
+        answer = "嗨嗨我是你的AI助理 (´・ω・`)\n\n1. 請直接發問，我會翻翻我腦中的知識，盡我所知地回答你。\n\n2. 因為我是個謹慎的AI，如果我不知道答案我會說我不知道，再請你換個方式問或換個問題，不要罵我🥹\n\n3. 當我開始鬼打牆，可以使用指令： /清除、/消除記憶、/clear 來重置我的記憶🪄"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=answer))
         return
     else:
@@ -217,7 +217,7 @@ def handle_message(event):
         ref_doc_template = f"{ref_doc_template}\n{url}"
 
     # add reference video/doc
-    answer = f"{answer}\n\nReference: {ref_doc_template}" if answer != '我不知道。' else f"這個部分我不太確定，以下是我找到最接近的參考資訊\n\nReference: {ref_doc_template}"
+    answer = f"{answer}\n\nRef: {ref_doc_template}" if not answer.startswith("我不知道") else f"這個部分我不太確定，但是可以看看我找到最接近的參考資訊\n\nRef: {ref_doc_template}"
 
     # reply message
     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=answer))
